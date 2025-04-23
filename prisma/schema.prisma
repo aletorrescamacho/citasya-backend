@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Empresa {
+  id              Int               @id @default(autoincrement())
+  nombre          String
+  slug            String            @unique
+  contacto        String
+  servicios       Servicio[]
+  empleados       Empleado[]
+  citas           Cita[]
+  credencialAdmin AdminCredencial?
+}
+
+
+model Servicio {
+  id         Int        @id @default(autoincrement())
+  nombre     String
+  duracion   Int        // minutos
+  precio     Float
+  empresa    Empresa    @relation(fields: [empresaId], references: [id])
+  empresaId  Int
+  empleados  EmpleadoServicio[]
+  citas      Cita[]
+}
+
+model Empleado {
+  id           Int        @id @default(autoincrement())
+  nombre       String
+  empresa      Empresa    @relation(fields: [empresaId], references: [id])
+  empresaId    Int
+  horarios     Horario[]
+  servicios    EmpleadoServicio[]
+  citas        Cita[]
+}
+
+model Horario {
+  id          Int       @id @default(autoincrement())
+  dia         String    // Ej: "lunes", "martes"
+  horaInicio  String    // "08:00"
+  horaFin     String    // "14:00"
+  empleado    Empleado  @relation(fields: [empleadoId], references: [id])
+  empleadoId  Int
+}
+
+model EmpleadoServicio {
+  id          Int       @id @default(autoincrement())
+  empleado    Empleado  @relation(fields: [empleadoId], references: [id])
+  empleadoId  Int
+  servicio    Servicio  @relation(fields: [servicioId], references: [id])
+  servicioId  Int
+}
+
+model Cita {
+  id            Int       @id @default(autoincrement())
+  clienteNombre String
+  cedula        String
+  correo        String
+  telefono      String
+  fecha         DateTime
+  estado        String     @default("activa") // activa, cancelada, etc.
+  empresa       Empresa    @relation(fields: [empresaId], references: [id])
+  empresaId     Int
+  servicio      Servicio   @relation(fields: [servicioId], references: [id])
+  servicioId    Int
+  empleado      Empleado?  @relation(fields: [empleadoId], references: [id])
+  empleadoId    Int?
+}
+
+model AdminCredencial {
+  id        Int     @id @default(autoincrement())
+  usuario   String  @unique
+  llave     String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  empresaId Int     @unique
+}
+

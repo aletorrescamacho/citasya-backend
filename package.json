@@ -1,0 +1,28 @@
+{
+  "name": "citasya-backend",
+  "version": "1.0.0",
+  "main": "hola.js",
+ "scripts": {
+  "start": "node index.js"
+},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aletorrescamacho/citasya-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aletorrescamacho/citasya-backend/issues"
+  },
+  "homepage": "https://github.com/aletorrescamacho/citasya-backend#readme",
+  "description": "",
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.18.2",
+    "nodemailer": "^6.10.1",
+    "prisma": "^6.6.0"
+  }
+}
