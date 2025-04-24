@@ -59,3 +59,62 @@ exports.crearCredenciales = async (req, res) => {
   }
 };
 
+exports.crearServicio = async (req, res) => {
+    try {
+      const { empresaSlug, nombre, duracion, precio } = req.body;
+  
+      if (!empresaSlug || !nombre || !duracion || !precio) {
+        return res.status(400).json({ error: 'Faltan campos obligatorios' });
+      }
+  
+      const empresa = await prisma.empresa.findUnique({ where: { slug: empresaSlug } });
+      if (!empresa) {
+        return res.status(404).json({ error: 'Empresa no encontrada' });
+      }
+  
+      const servicio = await prisma.servicio.create({
+        data: {
+          nombre,
+          duracion,
+          precio,
+          empresa: {
+            connect: { id: empresa.id }
+          }
+        }
+      });
+  
+      res.status(201).json(servicio);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error al crear el servicio' });
+    }
+  };
+
+  exports.crearEmpleado = async (req, res) => {
+    try {
+      const { nombre, empresaSlug } = req.body;
+  
+      if (!nombre || !empresaSlug) {
+        return res.status(400).json({ error: 'Faltan campos obligatorios' });
+      }
+  
+      const empresa = await prisma.empresa.findUnique({ where: { slug: empresaSlug } });
+      if (!empresa) {
+        return res.status(404).json({ error: 'Empresa no encontrada' });
+      }
+  
+      const empleado = await prisma.empleado.create({
+        data: {
+          nombre,
+          empresa: { connect: { id: empresa.id } }
+        }
+      });
+  
+      res.status(201).json(empleado);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error al crear el empleado' });
+    }
+  };
+  
+
