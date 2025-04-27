@@ -8,11 +8,11 @@ app.use(express.json());
 
 // Importa rutas
 const adminRoutes = require('./routes/admin.routes');
-//const publicRoutes = require('./routes/public.routes');
+const publicRoutes = require('./routes/public.routes');
 console.log('adminRoutes exportado:', adminRoutes);
 
 app.use('/admin', adminRoutes);
-//app.use('/empresa', publicRoutes);
+app.use('/empresa', publicRoutes);
 
 app.get('/', (req, res) => res.send('API funcionando ✅'));
 

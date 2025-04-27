@@ -64,7 +64,8 @@ model Cita {
   correo        String
   telefono      String
   fecha         DateTime
-  estado        String     @default("activa") // activa, cancelada, etc.
+  hora          String     
+  estado        String     @default("activa")
   empresa       Empresa    @relation(fields: [empresaId], references: [id])
   empresaId     Int
   servicio      Servicio   @relation(fields: [servicioId], references: [id])
@@ -72,6 +73,7 @@ model Cita {
   empleado      Empleado?  @relation(fields: [empleadoId], references: [id])
   empleadoId    Int?
 }
+
 
 model AdminCredencial {
   id        Int     @id @default(autoincrement())

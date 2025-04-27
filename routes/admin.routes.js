@@ -54,6 +54,116 @@ http://localhost:3000/admin/empleado
 }
 */
 
+///////////////////////////////////////////////////
 
+//Asignar horarios al empleado
+router.post('/empleado/horario', adminController.asignarHorario);
+
+/*
+http://localhost:3000/admin/empleado/horario
+{
+  "empleadoId": 1,
+  "dia": "lunes",
+  "horaInicio": "08:00",
+  "horaFin": "13:00"
+}
+
+*/
+
+/////////////////////////////////////////////////////
+
+// Asignar servicios que realiza el empleado
+router.post('/empleado/servicio', adminController.vincularServicio);
+
+/*
+http://localhost:3000/admin/empleado/servicio
+{
+  "empleadoId": 1,
+  "servicioId": 1
+}
+
+*/
+
+///////////////////////////////////////////
+
+// Editar servicio
+router.put('/servicio/:id', adminController.editarServicio);
+/*
+http://localhost:3000/admin/servicio/1
+PUT
+{
+  "nombre": "Quiropedia avanzada",
+  "duracion": 60,
+  "precio": 25.0
+}
+
+*/
+
+///////////////////////////////////////////
+
+// Eliminar servicio
+router.delete('/servicio/:id', adminController.eliminarServicio);
+/*
+DELETE
+http://localhost:3000/admin/servicio/1
+
+
+*/
+
+/////////////////////////////////////////////////////////////////
+
+// Editar empleado
+router.put('/empleado/:id', adminController.editarEmpleado);
+/*
+http://localhost:3000/admin/empleado/1
+PUT
+
+{
+  "nombre": "Yelitza González",
+  "horarios": [
+    { "dia": "lunes", "horaInicio": "08:00", "horaFin": "13:00" },
+    { "dia": "miércoles", "horaInicio": "10:00", "horaFin": "14:00" }
+  ],
+  "servicios": [1, 2]
+}
+
+*/
+
+/////////////////////////////////////////////////////////////////////////////////
+
+// Eliminar empleado
+router.delete('/empleado/:id', adminController.eliminarEmpleado);
+
+/*
+http://localhost:3000/admin/empleado/1
+DELETE
+*/
+
+/////////////////////////////////////////////////////////////////////////////////
+
+// Iniciar sesión como admin
+router.post('/login', adminController.loginAdmin);
+
+/*
+http://localhost:3000/admin/login
+
+{
+  "usuario": "admin-tamanaco",
+  "llave": "123456"
+}
+
+
+
+*/
+
+/////////////////////////////////////////////////////////////////
+
+// Ver citas como admin
+router.get('/citas/:empresaSlug', adminController.obtenerCitas);
+
+/*
+http://localhost:3000/admin/citas/tamanaco-spa
+GET
+*/
 
 module.exports = router;
