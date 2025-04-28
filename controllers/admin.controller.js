@@ -308,9 +308,9 @@ exports.crearServicio = async (req, res) => {
       }
   
       res.json({
-        mensaje: 'Login exitoso',
-        empresa: credencial.empresa
+        empresaSlug: credencial.empresa.slug
       });
+      
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Error al iniciar sesión' });
