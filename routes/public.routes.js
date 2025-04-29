@@ -44,4 +44,7 @@ http://localhost:3000/empresa/tamanaco-spa/cancelar
 router.get('/:slug/horarios-disponibles', publicController.obtenerHorariosDisponibles);
 
 
+router.get('/:slug/servicios', publicController.obtenerServiciosPorEmpresa);
+router.get('/:slug/empleados', publicController.obtenerEmpleadosPorEmpresa);
+
 module.exports = router;
