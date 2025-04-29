@@ -166,4 +166,7 @@ http://localhost:3000/admin/citas/tamanaco-spa
 GET
 */
 
+router.get('/empleado/:id', adminController.obtenerEmpleadoCompleto);
+
+
 module.exports = router;

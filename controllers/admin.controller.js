@@ -360,3 +360,27 @@ exports.crearServicio = async (req, res) => {
     }
   };
   
+  exports.obtenerEmpleadoCompleto = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const empleado = await prisma.empleado.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          horarios: true,
+          servicios: {
+            include: { servicio: true }
+          }
+        }
+      });
+  
+      if (!empleado) {
+        return res.status(404).json({ error: 'Empleado no encontrado' });
+      }
+  
+      res.json(empleado);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error al obtener empleado' });
+    }
+  };
+  
