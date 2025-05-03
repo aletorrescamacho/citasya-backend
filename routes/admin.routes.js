@@ -178,6 +178,5 @@ router.get('/estadisticas/:slug/citas-por-dia-ultimos-7', EstadisticasController
 router.get('/estadisticas/:slug/citas-por-anio', EstadisticasController.citasPorAnio)
 
 
-router.get("/citas/:slug/todas", getCitasOrdenadas)
 
 module.exports = router;
