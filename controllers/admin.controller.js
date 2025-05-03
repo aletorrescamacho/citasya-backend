@@ -383,4 +383,26 @@ exports.crearServicio = async (req, res) => {
       res.status(500).json({ error: 'Error al obtener empleado' });
     }
   };
+
+  export const getCitasOrdenadas = async (req, res) => {
+    try {
+      const { slug } = req.params
+  
+      const citas = await prisma.cita.findMany({
+        where: {
+          empresa: { slug },
+        },
+        include: {
+          servicio: true,
+          empleado: true,
+        },
+        orderBy: { fecha: "asc" }, // Ordenadas por fecha de menor a mayor
+      })
+  
+      res.json(citas)
+    } catch (error) {
+      console.error("Error al obtener citas ordenadas:", error)
+      res.status(500).json({ error: "Error al obtener citas" })
+    }
+  }
   
