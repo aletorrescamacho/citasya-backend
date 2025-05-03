@@ -384,4 +384,20 @@ exports.crearServicio = async (req, res) => {
     }
   };
 
+  export const getTotalCitas = async (req, res) => {
+    try {
+      const { slug } = req.params
   
+      const total = await prisma.cita.count({
+        where: {
+          empresa: { slug },
+        },
+      })
+  
+      res.json({ total })
+    } catch (error) {
+      console.error("Error al contar citas:", error)
+      res.status(500).json({ error: "Error al contar citas" })
+    }
+  }
+
