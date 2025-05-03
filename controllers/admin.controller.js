@@ -384,7 +384,7 @@ exports.crearServicio = async (req, res) => {
     }
   };
 
-  export const getTotalCitas = async (req, res) => {
+  exports.getTotalCitas = async (req, res) => {
     try {
       const { slug } = req.params
   
