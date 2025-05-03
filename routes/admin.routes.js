@@ -179,5 +179,5 @@ router.get('/estadisticas/:slug/citas-por-anio', EstadisticasController.citasPor
 
 
 
-router.get("/citas/:slug/total", getTotalCitas)
+router.get("/citas/:slug/total", adminController.getTotalCitas)
 module.exports = router;
