@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
+const EstadisticasController = require('../controllers/estadisticas.controller')
 
 // Crear empresa
 router.post('/empresa', adminController.crearEmpresa);
@@ -167,6 +168,14 @@ GET
 */
 
 router.get('/empleado/:id', adminController.obtenerEmpleadoCompleto);
+
+
+
+router.get('/estadisticas/:slug/citas-por-mes', EstadisticasController.citasPorMes)
+router.get('/estadisticas/:slug/citas-por-empleado', EstadisticasController.citasPorEmpleado)
+router.get('/estadisticas/:slug/citas-por-servicio', EstadisticasController.citasPorServicio)
+router.get('/estadisticas/:slug/citas-por-dia-ultimos-7', EstadisticasController.citasPorDiaUltimos7)
+router.get('/estadisticas/:slug/citas-por-anio', EstadisticasController.citasPorAnio)
 
 
 module.exports = router;
