@@ -44,96 +44,111 @@ exports.getInfoEmpresa = async (req, res) => {
 const nodemailer = require('nodemailer');
 
 exports.agendarCita = async (req, res) => {
-    try {
-      const { slug } = req.params;
-      const {
+  try {
+    const { slug } = req.params;
+    const {
+      clienteNombre,
+      cedula,
+      correo,
+      telefono,
+      servicioId,
+      fecha,
+      hora,
+      empleadoId // opcional
+    } = req.body;
+
+    if (!clienteNombre || !cedula || !correo || !telefono || !servicioId || !fecha || !hora) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    }
+
+    const empresa = await prisma.empresa.findUnique({ where: { slug } });
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const servicio = await prisma.servicio.findUnique({ where: { id: servicioId } });
+    if (!servicio) return res.status(404).json({ error: 'Servicio no encontrado' });
+
+    let empleadoAsignadoId = empleadoId;
+
+    const fechaCompleta = new Date(`${fecha}T${hora}:00`);
+    const fechaSolo = new Date(fecha);
+    const finCita = new Date(fechaCompleta.getTime() + servicio.duracion * 60000); // duración en milisegundos
+
+    // Buscar empleados disponibles (si no se seleccionó uno)
+    if (!empleadoId) {
+      const dayName = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][fechaSolo.getDay()];
+
+      const candidatos = await prisma.empleadoServicio.findMany({
+        where: { servicioId },
+        include: {
+          empleado: {
+            include: {
+              horarios: true,
+              citas: {
+                where: { fecha: fechaSolo }
+              }
+            }
+          }
+        }
+      });
+
+      const disponible = candidatos.find(({ empleado }) => {
+        const disponibleEnHorario = empleado.horarios.some(h => h.dia === dayName);
+        if (!disponibleEnHorario) return false;
+
+        const conflicto = empleado.citas.some(c => {
+          const inicio = new Date(`${c.fecha.toISOString().split('T')[0]}T${c.hora}:00`);
+          const fin = new Date(inicio.getTime() + servicio.duracion * 60000);
+          return (fechaCompleta < fin && finCita > inicio); // solapan
+        });
+
+        return !conflicto;
+      });
+
+      if (!disponible) return res.status(409).json({ error: 'No hay empleados disponibles' });
+
+      empleadoAsignadoId = disponible.empleado.id;
+    } else {
+      const conflictos = await prisma.cita.findMany({
+        where: {
+          empleadoId: empleadoAsignadoId,
+          fecha: fechaSolo
+        }
+      });
+
+      const haySolapamiento = conflictos.some(c => {
+        const inicio = new Date(`${c.fecha.toISOString().split('T')[0]}T${c.hora}:00`);
+        const fin = new Date(inicio.getTime() + servicio.duracion * 60000);
+        return (fechaCompleta < fin && finCita > inicio);
+      });
+
+      if (haySolapamiento) {
+        return res.status(409).json({ error: 'El empleado ya tiene una cita en ese horario' });
+      }
+    }
+
+    const cita = await prisma.cita.create({
+      data: {
         clienteNombre,
         cedula,
         correo,
         telefono,
-        servicioId,
-        fecha,
+        fecha: fechaSolo,
         hora,
-        empleadoId // opcional
-      } = req.body;
-  
-      if (!clienteNombre || !cedula || !correo || !telefono || !servicioId || !fecha || !hora) {
-        return res.status(400).json({ error: 'Faltan campos obligatorios' });
+        estado: 'activa',
+        empresa: { connect: { id: empresa.id } },
+        servicio: { connect: { id: servicioId } },
+        empleado: { connect: { id: empleadoAsignadoId } }
       }
-  
-      const empresa = await prisma.empresa.findUnique({ where: { slug } });
-      if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
-  
-      let empleadoAsignadoId = empleadoId;
-  
-      // Si no se seleccionó empleado, buscar uno disponible
-      if (!empleadoId) {
-        // Para evitar problemas de zona horaria, añade "T12:00:00" a la fecha
-        const fechaObj = new Date(fecha + 'T12:00:00');
-  
-        // Usamos un arreglo estático de días (en español)
-        const weekdays = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-        // Si usas getUTCDay() podrías obtener el día correcto en UTC,
-        // o usa getDay() si deseas el día según la configuración local.
-        const dayName = weekdays[fechaObj.getDay()]; // o getUTCDay() según convenga
-        console.log('Día generado para la fecha:', fecha, '=>', dayName); // 👈 este log
-        // Busca todos los empleados vinculados al servicio
-        const empleados = await prisma.empleadoServicio.findMany({
-          where: { servicioId },
-          include: {
-            empleado: {
-              include: {
-                horarios: true,
-                citas: {
-                  where: {
-                    fecha: new Date(fecha), // aqui la fecha se filtra según lo almacenado
-                    // No se filtra por "hora" aquí ya que el campo "hora" no se puede filtrar
-                    // directamente en un objeto Date: mejor lo validamos en el siguiente paso.
-                  }
-                }
-              }
-            }
-          }
-        });
-  
-        // Filtramos manualmente los que tienen horario disponible para el día
-        const disponible = empleados.find(({ empleado }) =>
-          empleado.horarios.some(h => h.dia.toLowerCase() === dayName.toLowerCase())
-          // Opcional: además, podrías validar que no tenga una cita en ese mismo horario,
-          // comparando la propiedad "hora" de cada cita (siempre y cuando formatees correctamente).
-        );
-  
-        if (!disponible) {
-          return res.status(409).json({ error: 'No hay empleados disponibles para ese horario' });
-        }
-  
-        empleadoAsignadoId = disponible.empleado.id;
-      }
-  
-      const cita = await prisma.cita.create({
-        data: {
-          clienteNombre,
-          cedula,
-          correo,
-          telefono,
-          fecha: new Date(fecha),
-          hora,  // Asumiendo que 'hora' es un string (ej: "10:00")
-          estado: 'activa',
-          empresa: { connect: { id: empresa.id } },
-          servicio: { connect: { id: servicioId } },
-          empleado: { connect: { id: empleadoAsignadoId } }
-        }
-      });
-  
-      // Aquí podrías implementar el envío de correo usando nodemailer
-      
-      res.status(201).json({ mensaje: 'Cita agendada exitosamente', cita });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Error al agendar cita' });
-    }
-  };
-  
+    });
+
+    res.status(201).json({ mensaje: 'Cita agendada exitosamente', cita });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al agendar cita' });
+  }
+};
+
 
 
   exports.cancelarCita = async (req, res) => {
