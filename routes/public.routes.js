@@ -47,4 +47,7 @@ router.get('/:slug/horarios-disponibles', publicController.obtenerHorariosDispon
 router.get('/:slug/servicios', publicController.obtenerServiciosPorEmpresa);
 router.get('/:slug/empleados', publicController.obtenerEmpleadosPorEmpresa);
 
+
+router.get('/:slug/fechas-horarios', publicController.obtenerFechasYHorarios);
+
 module.exports = router;

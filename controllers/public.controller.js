@@ -364,3 +364,83 @@ exports.agendarCita = async (req, res) => {
       res.status(500).json({ error: 'Error al obtener empleados' });
     }
   };
+
+
+  exports.obtenerFechasYHorarios = async (req, res) => {
+    const { slug } = req.params;
+    const { servicioId, empleadoId } = req.query;
+  
+    try {
+      const empresa = await prisma.empresa.findUnique({ where: { slug } });
+      if (!empresa) return res.status(404).json({ error: "Empresa no encontrada" });
+  
+      const empleados = await prisma.empleado.findMany({
+        where: {
+          empresaId: empresa.id,
+          servicios: { some: { servicioId: parseInt(servicioId) } },
+          ...(empleadoId ? { id: parseInt(empleadoId) } : {}),
+        },
+        include: {
+          horarios: true,
+        },
+      });
+  
+      const reservas = await prisma.cita.findMany({
+        where: {
+          empresaId: empresa.id,
+          servicioId: parseInt(servicioId),
+          ...(empleadoId ? { empleadoId: parseInt(empleadoId) } : {}),
+        },
+      });
+  
+      const fechasDisponibles = [];
+      const hoy = new Date();
+      const diasSemana = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+  
+      for (let i = 0; i < 15; i++) {
+        const fecha = new Date();
+        fecha.setDate(hoy.getDate() + i);
+        const diaNombre = diasSemana[fecha.getDay()];
+  
+        const horariosDia = [];
+  
+        for (const emp of empleados) {
+          for (const h of emp.horarios) {
+            if (h.dia === diaNombre) {
+              let horaActual = h.horaInicio;
+              while (horaActual < h.horaFin) {
+                const yaReservado = reservas.some(
+                  (r) =>
+                    r.fecha.toISOString().split("T")[0] === fecha.toISOString().split("T")[0] &&
+                    r.hora === horaActual &&
+                    (!empleadoId || r.empleadoId === parseInt(empleadoId))
+                );
+  
+                if (!yaReservado) {
+                  horariosDia.push({ hora: horaActual, empleadoId: emp.id });
+                }
+  
+                const [h, m] = horaActual.split(":").map(Number);
+                const nueva = new Date(fecha);
+                nueva.setHours(h);
+                nueva.setMinutes(m + 30);
+                horaActual = nueva.toTimeString().slice(0, 5);
+              }
+            }
+          }
+        }
+  
+        if (horariosDia.length > 0) {
+          fechasDisponibles.push({
+            fecha: fecha.toISOString().split("T")[0],
+            horarios: horariosDia,
+          });
+        }
+      }
+  
+      return res.json(fechasDisponibles);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Error al obtener horarios disponibles" });
+    }
+  };
