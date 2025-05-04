@@ -374,6 +374,11 @@ exports.agendarCita = async (req, res) => {
       const empresa = await prisma.empresa.findUnique({ where: { slug } });
       if (!empresa) return res.status(404).json({ error: "Empresa no encontrada" });
   
+      const servicio = await prisma.servicio.findUnique({
+        where: { id: parseInt(servicioId) },
+      });
+      if (!servicio) return res.status(404).json({ error: "Servicio no encontrado" });
+  
       const empleados = await prisma.empleado.findMany({
         where: {
           empresaId: empresa.id,
@@ -393,6 +398,8 @@ exports.agendarCita = async (req, res) => {
         },
       });
   
+      const duracionMin = servicio.duracion; // duración real del servicio
+  
       const fechasDisponibles = [];
       const hoy = new Date();
       const diasSemana = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -401,30 +408,38 @@ exports.agendarCita = async (req, res) => {
         const fecha = new Date();
         fecha.setDate(hoy.getDate() + i);
         const diaNombre = diasSemana[fecha.getDay()];
-  
+        const fechaStr = fecha.toISOString().split("T")[0];
         const horariosDia = [];
   
         for (const emp of empleados) {
           for (const h of emp.horarios) {
             if (h.dia === diaNombre) {
               let horaActual = h.horaInicio;
-              while (horaActual < h.horaFin) {
-                const yaReservado = reservas.some(
-                  (r) =>
-                    r.fecha.toISOString().split("T")[0] === fecha.toISOString().split("T")[0] &&
-                    r.hora === horaActual &&
-                    (!empleadoId || r.empleadoId === parseInt(empleadoId))
-                );
   
-                if (!yaReservado) {
+              while (horaActual < h.horaFin) {
+                const [hH, hM] = horaActual.split(":").map(Number);
+                const inicio = new Date(`${fechaStr}T${horaActual}`);
+                const fin = new Date(inicio.getTime() + duracionMin * 60000);
+                const finHoraStr = fin.toTimeString().slice(0, 5);
+  
+                // validar que no se pase del horario permitido
+                if (finHoraStr > h.horaFin) break;
+  
+                // verificar si hay solapamiento con reservas
+                const solapado = reservas.some((r) => {
+                  if (r.fecha.toISOString().split("T")[0] !== fechaStr) return false;
+                  const rInicio = new Date(`${fechaStr}T${r.hora}`);
+                  const rFin = new Date(rInicio.getTime() + duracionMin * 60000);
+                  return !(fin <= rInicio || inicio >= rFin);
+                });
+  
+                if (!solapado) {
                   horariosDia.push({ hora: horaActual, empleadoId: emp.id });
                 }
   
-                const [h, m] = horaActual.split(":").map(Number);
-                const nueva = new Date(fecha);
-                nueva.setHours(h);
-                nueva.setMinutes(m + 30);
-                horaActual = nueva.toTimeString().slice(0, 5);
+                // avanzar hora actual según duración real del servicio
+                const nuevaHora = new Date(inicio.getTime() + duracionMin * 60000);
+                horaActual = nuevaHora.toTimeString().slice(0, 5);
               }
             }
           }
@@ -432,7 +447,7 @@ exports.agendarCita = async (req, res) => {
   
         if (horariosDia.length > 0) {
           fechasDisponibles.push({
-            fecha: fecha.toISOString().split("T")[0],
+            fecha: fechaStr,
             horarios: horariosDia,
           });
         }
