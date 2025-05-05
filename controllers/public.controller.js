@@ -64,15 +64,11 @@ exports.agendarCita = async (req, res) => {
     const empresa = await prisma.empresa.findUnique({ where: { slug } })
     if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' })
 
-    // Buscar la duración del servicio
     const servicio = await prisma.servicio.findUnique({ where: { id: servicioId } })
     if (!servicio) return res.status(404).json({ error: 'Servicio no encontrado' })
 
     const duracionMinutos = servicio.duracion
 
-    let empleadoAsignadoId = empleadoId
-
-    // Obtener empleados disponibles para ese servicio
     const empleados = await prisma.empleadoServicio.findMany({
       where: { servicioId },
       include: {
@@ -85,13 +81,27 @@ exports.agendarCita = async (req, res) => {
       }
     })
 
-    // Obtener el día de la semana
     const dayName = new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()
 
-    const horaInicio = parseInt(hora.split(":")[0]) * 60 + parseInt(hora.split(":")[1])
+    const horaInicio = parseInt(hora.split(":"))[0] * 60 + parseInt(hora.split(":"))[1]
     const horaFin = horaInicio + duracionMinutos
 
-    // Validar disponibilidad por empleado
+    // Obtener todos los servicios usados ese día para traer sus duraciones
+    const serviciosUsados = new Set()
+    empleados.forEach(({ empleado }) => {
+      empleado.citas.forEach(cita => serviciosUsados.add(cita.servicioId))
+    })
+
+    const serviciosDuracion = await prisma.servicio.findMany({
+      where: { id: { in: Array.from(serviciosUsados) } },
+      select: { id: true, duracion: true }
+    })
+
+    const serviciosDuracionPorId = {}
+    serviciosDuracion.forEach(serv => {
+      serviciosDuracionPorId[serv.id] = serv.duracion
+    })
+
     const disponible = empleados.find(({ empleado }) => {
       if (empleadoId && empleado.id !== empleadoId) return false
 
@@ -99,11 +109,9 @@ exports.agendarCita = async (req, res) => {
       if (!trabajaEseDia) return false
 
       const hayConflicto = empleado.citas.some(cita => {
-        const citaInicio = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1])
-        const citaServicio = servicioId === cita.servicioId
-          ? servicio.duracion
-          : empleados.find(e => e.empleado.id === empleado.id).empleadoServicios.find(es => es.servicioId === cita.servicioId)?.servicio?.duracion || 30
-        const citaFin = citaInicio + citaServicio
+        const citaInicio = parseInt(cita.hora.split(":"))[0] * 60 + parseInt(cita.hora.split(":"))[1]
+        const citaDuracion = serviciosDuracionPorId[cita.servicioId] || 30
+        const citaFin = citaInicio + citaDuracion
 
         return horaInicio < citaFin && horaFin > citaInicio
       })
@@ -114,8 +122,6 @@ exports.agendarCita = async (req, res) => {
     if (!disponible) {
       return res.status(409).json({ error: 'No hay disponibilidad para ese horario' })
     }
-
-    empleadoAsignadoId = disponible.empleado.id
 
     const cita = await prisma.cita.create({
       data: {
@@ -128,7 +134,7 @@ exports.agendarCita = async (req, res) => {
         estado: 'activa',
         empresa: { connect: { id: empresa.id } },
         servicio: { connect: { id: servicioId } },
-        empleado: { connect: { id: empleadoAsignadoId } }
+        empleado: { connect: { id: disponible.empleado.id } }
       }
     })
 
@@ -138,6 +144,7 @@ exports.agendarCita = async (req, res) => {
     res.status(500).json({ error: 'Error al agendar cita' })
   }
 }
+
 
   
 
