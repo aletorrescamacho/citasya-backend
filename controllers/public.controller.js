@@ -69,57 +69,54 @@ exports.agendarCita = async (req, res) => {
 
     const duracionMinutos = servicio.duracion
 
-    const empleados = await prisma.empleadoServicio.findMany({
-      where: { servicioId },
+    const empleadosVinculados = await prisma.empleadoServicio.findMany({
+      where: {
+        servicioId,
+        empleado: { empresaId: empresa.id }
+      },
       include: {
         empleado: {
           include: {
             horarios: true,
-            citas: { where: { fecha: new Date(fecha) } }
+            citas: {
+              where: {
+                fecha: new Date(fecha),
+                estado: 'activa'
+              },
+              include: {
+                servicio: { select: { duracion: true } }
+              }
+            }
           }
         }
       }
     })
 
-    const dayName = new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()
+    const diaSemana = new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()
+    const horaInicioMin = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1])
+    const horaFinMin = horaInicioMin + duracionMinutos
 
-    const horaInicio = parseInt(hora.split(":"))[0] * 60 + parseInt(hora.split(":"))[1]
-    const horaFin = horaInicio + duracionMinutos
-
-    // Obtener todos los servicios usados ese día para traer sus duraciones
-    const serviciosUsados = new Set()
-    empleados.forEach(({ empleado }) => {
-      empleado.citas.forEach(cita => serviciosUsados.add(cita.servicioId))
-    })
-
-    const serviciosDuracion = await prisma.servicio.findMany({
-      where: { id: { in: Array.from(serviciosUsados) } },
-      select: { id: true, duracion: true }
-    })
-
-    const serviciosDuracionPorId = {}
-    serviciosDuracion.forEach(serv => {
-      serviciosDuracionPorId[serv.id] = serv.duracion
-    })
-
-    const disponible = empleados.find(({ empleado }) => {
+    const empleadoDisponible = empleadosVinculados.find(({ empleado }) => {
       if (empleadoId && empleado.id !== empleadoId) return false
 
-      const trabajaEseDia = empleado.horarios.some(h => h.dia.toLowerCase() === dayName)
-      if (!trabajaEseDia) return false
+      const horario = empleado.horarios.find(h => h.dia.toLowerCase() === diaSemana)
+      if (!horario) return false
+
+      const inicioHorario = parseInt(horario.horaInicio.split(':')[0]) * 60 + parseInt(horario.horaInicio.split(':')[1])
+      const finHorario = parseInt(horario.horaFin.split(':')[0]) * 60 + parseInt(horario.horaFin.split(':')[1])
+
+      if (horaInicioMin < inicioHorario || horaFinMin > finHorario) return false
 
       const hayConflicto = empleado.citas.some(cita => {
-        const citaInicio = parseInt(cita.hora.split(":"))[0] * 60 + parseInt(cita.hora.split(":"))[1]
-        const citaDuracion = serviciosDuracionPorId[cita.servicioId] || 30
-        const citaFin = citaInicio + citaDuracion
-
-        return horaInicio < citaFin && horaFin > citaInicio
+        const citaInicio = parseInt(cita.hora.split(':')[0]) * 60 + parseInt(cita.hora.split(':')[1])
+        const citaFin = citaInicio + (cita.servicio?.duracion || 30)
+        return horaInicioMin < citaFin && horaFinMin > citaInicio
       })
 
       return !hayConflicto
     })
 
-    if (!disponible) {
+    if (!empleadoDisponible) {
       return res.status(409).json({ error: 'No hay disponibilidad para ese horario' })
     }
 
@@ -134,7 +131,7 @@ exports.agendarCita = async (req, res) => {
         estado: 'activa',
         empresa: { connect: { id: empresa.id } },
         servicio: { connect: { id: servicioId } },
-        empleado: { connect: { id: disponible.empleado.id } }
+        empleado: { connect: { id: empleadoDisponible.empleado.id } }
       }
     })
 
@@ -145,42 +142,6 @@ exports.agendarCita = async (req, res) => {
   }
 }
 
-
-  
-
-
-  exports.cancelarCita = async (req, res) => {
-    try {
-      const { cedula, fecha, hora } = req.body;
-  
-      if (!cedula || !fecha || !hora) {
-        return res.status(400).json({ error: 'Faltan campos' });
-      }
-  
-      const cita = await prisma.cita.findFirst({
-        where: {
-          cedula,
-          fecha: new Date(fecha),
-          hora,
-          estado: 'activa'
-        }
-      });
-  
-      if (!cita) {
-        return res.status(404).json({ error: 'Cita no encontrada o ya cancelada' });
-      }
-  
-      const citaCancelada = await prisma.cita.update({
-        where: { id: cita.id },
-        data: { estado: 'cancelada' }
-      });
-  
-      res.json({ mensaje: 'Cita cancelada correctamente', cita: citaCancelada });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Error al cancelar la cita' });
-    }
-  };
 
   
   exports.obtenerHorariosDisponibles = async (req, res) => {
