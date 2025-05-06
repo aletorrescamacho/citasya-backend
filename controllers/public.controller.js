@@ -363,12 +363,17 @@ exports.agendarCita = async (req, res) => {
         const fechaActual = new Date();
         fechaActual.setDate(fechaActual.getDate() + i);
         const dia = fechaActual.toLocaleDateString('es-VE', { weekday: 'long' }).toLowerCase();
+        // Normaliza el nombre del día para evitar problemas de tildes, mayúsculas, espacios, etc.
+        const diaNormalizado = dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
         const fechaStr = fechaActual.toISOString().split('T')[0];
   
         let horariosDelDia = [];
   
         for (const { empleado } of empleadosVinculados) {
-          const horario = empleado.horarios.find(h => h.dia.toLowerCase() === dia);
+          const horario = empleado.horarios.find(h =>
+            h.dia &&
+            h.dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() === diaNormalizado
+          );
           if (!horario) continue;
   
           let inicio = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
