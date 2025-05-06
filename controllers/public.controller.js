@@ -376,10 +376,10 @@ exports.agendarCita = async (req, res) => {
           );
           if (!horario) continue;
   
-          const inicio = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
-          const fin = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
+          const inicioTurno = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
+          const finTurno = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
   
-          // Ordena las citas por hora de inicio
+          // Citas ordenadas por inicio
           const citasOcupadas = empleado.citas
             .filter(cita => cita.fecha.toISOString().split('T')[0] === fechaStr)
             .map(cita => {
@@ -389,15 +389,22 @@ exports.agendarCita = async (req, res) => {
             })
             .sort((a, b) => a.inicio - b.inicio);
   
-          // Recorre cada minuto del horario laboral
-          for (let currentTime = inicio; currentTime + duracionServicio <= fin; currentTime++) {
-            // Verifica si este bloque se solapa con alguna cita existente
+          // Puntos de inicio posibles: inicio del turno y fin de cada cita
+          let posiblesInicios = [inicioTurno, ...citasOcupadas.map(c => c.fin)];
+  
+          // Eliminar duplicados y ordenar
+          posiblesInicios = [...new Set(posiblesInicios)].sort((a, b) => a - b);
+  
+          for (const start of posiblesInicios) {
+            // El bloque debe caber en el turno
+            if (start + duracionServicio > finTurno) continue;
+            // No debe solaparse con ninguna cita
             const haySolapamiento = citasOcupadas.some(cita =>
-              currentTime < cita.fin && (currentTime + duracionServicio) > cita.inicio
+              start < cita.fin && (start + duracionServicio) > cita.inicio
             );
             if (!haySolapamiento) {
               horariosDelDia.push({
-                hora: `${String(Math.floor(currentTime / 60)).padStart(2, '0')}:${String(currentTime % 60).padStart(2, '0')}`,
+                hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
               });
             }
@@ -418,7 +425,6 @@ exports.agendarCita = async (req, res) => {
       res.status(500).json({ error: 'Error al obtener horarios' });
     }
   };
-  
   exports.obtenerEmpleadosPorEmpresa = async (req, res) => {
     try {
       const { slug } = req.params;
