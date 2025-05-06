@@ -389,25 +389,22 @@ exports.agendarCita = async (req, res) => {
             })
             .sort((a, b) => a.inicio - b.inicio);
   
-          // Construir bloques libres
-          let bloquesLibres = [];
-          let bloqueInicio = inicioTurno;
-  
-          for (const cita of citasOcupadas) {
-            if (bloqueInicio < cita.inicio) {
-              bloquesLibres.push({ inicio: bloqueInicio, fin: cita.inicio });
-            }
-            bloqueInicio = Math.max(bloqueInicio, cita.fin);
+          // Puntos de inicio posibles: inicio del turno, fin de cada cita, y cada 5 minutos desde el inicio del turno
+          let posiblesInicios = [inicioTurno, ...citasOcupadas.map(c => c.fin)];
+          for (let t = inicioTurno; t + duracionServicio <= finTurno; t += 5) {
+            posiblesInicios.push(t);
           }
-          if (bloqueInicio < finTurno) {
-            bloquesLibres.push({ inicio: bloqueInicio, fin: finTurno });
-          }
+          // Eliminar duplicados y ordenar
+          posiblesInicios = [...new Set(posiblesInicios)].sort((a, b) => a - b);
   
-          // Solo permite reservar en el inicio de cada bloque libre si cabe el servicio completo
-          for (const bloque of bloquesLibres) {
-            if (bloque.inicio + duracionServicio <= bloque.fin) {
+          for (const start of posiblesInicios) {
+            if (start + duracionServicio > finTurno) continue;
+            const haySolapamiento = citasOcupadas.some(cita =>
+              start < cita.fin && (start + duracionServicio) > cita.inicio
+            );
+            if (!haySolapamiento) {
               horariosDelDia.push({
-                hora: `${String(Math.floor(bloque.inicio / 60)).padStart(2, '0')}:${String(bloque.inicio % 60).padStart(2, '0')}`,
+                hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
               });
             }
