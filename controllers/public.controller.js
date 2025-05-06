@@ -389,16 +389,16 @@ exports.agendarCita = async (req, res) => {
             })
             .sort((a, b) => a.inicio - b.inicio);
   
-          // Puntos de inicio posibles: inicio del turno y fin de cada cita
+          // Puntos de inicio posibles: inicio del turno, fin de cada cita, y cada 5 minutos desde el inicio del turno
           let posiblesInicios = [inicioTurno, ...citasOcupadas.map(c => c.fin)];
-  
+          for (let t = inicioTurno; t + duracionServicio <= finTurno; t += 5) {
+            posiblesInicios.push(t);
+          }
           // Eliminar duplicados y ordenar
           posiblesInicios = [...new Set(posiblesInicios)].sort((a, b) => a - b);
   
           for (const start of posiblesInicios) {
-            // El bloque debe caber en el turno
             if (start + duracionServicio > finTurno) continue;
-            // No debe solaparse con ninguna cita
             const haySolapamiento = citasOcupadas.some(cita =>
               start < cita.fin && (start + duracionServicio) > cita.inicio
             );
@@ -410,6 +410,11 @@ exports.agendarCita = async (req, res) => {
             }
           }
         }
+  
+        // Elimina horarios duplicados (por si acaso)
+        horariosDelDia = horariosDelDia.filter(
+          (h, idx, arr) => arr.findIndex(x => x.hora === h.hora && x.empleadoId === h.empleadoId) === idx
+        );
   
         if (horariosDelDia.length) {
           fechasHorarios.push({
