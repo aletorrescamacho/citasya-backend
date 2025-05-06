@@ -28,7 +28,7 @@ http://localhost:3000/empresa/tamanaco-spa/reservar
 //////////////////////////////////////
 
 //Cancelar citas
-router.post('/:slug/cancelar', publicController.cancelarCita);
+//router.post('/:slug/cancelar', publicController.cancelarCita);
 /*
 http://localhost:3000/empresa/tamanaco-spa/cancelar
 {
