@@ -310,35 +310,6 @@ exports.agendarCita = async (req, res) => {
     }
   };
 
-  exports.obtenerEmpleadosPorEmpresa = async (req, res) => {
-    try {
-      const { slug } = req.params;
-  
-      const empresa = await prisma.empresa.findUnique({
-        where: { slug },
-      });
-  
-      if (!empresa) {
-        return res.status(404).json({ error: 'Empresa no encontrada' });
-      }
-  
-      const empleados = await prisma.empleado.findMany({
-        where: { empresaId: empresa.id },
-        include: {
-          horarios: true,       // Opcional: trae los horarios si quieres
-          servicios: {
-            include: { servicio: true }, // Opcional: trae qué servicios hace el empleado
-          },
-        },
-      });
-  
-      res.json(empleados);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Error al obtener empleados' });
-    }
-  };
-
 
   exports.obtenerFechasYHorarios = async (req, res) => {
     try {
