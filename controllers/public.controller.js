@@ -376,7 +376,7 @@ exports.agendarCita = async (req, res) => {
           );
           if (!horario) continue;
   
-          let inicio = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
+          const inicio = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
           const fin = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
   
           // Ordena las citas por hora de inicio
@@ -389,28 +389,18 @@ exports.agendarCita = async (req, res) => {
             })
             .sort((a, b) => a.inicio - b.inicio);
   
-          let currentTime = inicio;
-  
-          for (const cita of citasOcupadas) {
-            // Mientras haya espacio antes de la siguiente cita, agrega bloques disponibles
-            while (currentTime + duracionServicio <= cita.inicio) {
+          // Recorre cada minuto del horario laboral
+          for (let currentTime = inicio; currentTime + duracionServicio <= fin; currentTime++) {
+            // Verifica si este bloque se solapa con alguna cita existente
+            const haySolapamiento = citasOcupadas.some(cita =>
+              currentTime < cita.fin && (currentTime + duracionServicio) > cita.inicio
+            );
+            if (!haySolapamiento) {
               horariosDelDia.push({
                 hora: `${String(Math.floor(currentTime / 60)).padStart(2, '0')}:${String(currentTime % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
               });
-              currentTime += duracionServicio;
             }
-            // Salta al final de la cita ocupada
-            currentTime = Math.max(currentTime, cita.fin);
-          }
-  
-          // Bloques después de la última cita hasta el fin del horario
-          while (currentTime + duracionServicio <= fin) {
-            horariosDelDia.push({
-              hora: `${String(Math.floor(currentTime / 60)).padStart(2, '0')}:${String(currentTime % 60).padStart(2, '0')}`,
-              empleadoId: empleado.id,
-            });
-            currentTime += duracionServicio;
           }
         }
   
