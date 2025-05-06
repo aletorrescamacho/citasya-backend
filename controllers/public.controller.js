@@ -345,6 +345,7 @@ exports.agendarCita = async (req, res) => {
                     gte: new Date(),
                     lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
                   },
+                  estado: 'activa'
                 },
                 include: {
                   servicio: {
@@ -369,9 +370,6 @@ exports.agendarCita = async (req, res) => {
         let horariosDelDia = [];
   
         for (const { empleado } of empleadosVinculados) {
-          // LOG para depuración
-          console.log('Empleado:', empleado.nombre, 'Horarios:', empleado.horarios.map(h => h.dia));
-  
           const horario = empleado.horarios.find(h =>
             h.dia &&
             h.dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() === diaNormalizado
@@ -381,24 +379,38 @@ exports.agendarCita = async (req, res) => {
           let inicio = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
           const fin = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
   
-          while (inicio + duracionServicio <= fin) {
-            const horaStr = `${String(Math.floor(inicio / 60)).padStart(2, '0')}:${String(inicio % 60).padStart(2, '0')}`;
-  
-            const conflicto = empleado.citas.some(cita => {
-              if (cita.fecha.toISOString().split('T')[0] !== fechaStr) return false;
+          // Ordena las citas por hora de inicio
+          const citasOcupadas = empleado.citas
+            .filter(cita => cita.fecha.toISOString().split('T')[0] === fechaStr)
+            .map(cita => {
               const horaCita = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1]);
-              const finCita = horaCita + (cita.servicio?.duracion || 30); // duración real desde relación
-              return !(inicio + duracionServicio <= horaCita || inicio >= finCita);
-            });
+              const duracionCita = cita.servicio?.duracion || 30;
+              return { inicio: horaCita, fin: horaCita + duracionCita };
+            })
+            .sort((a, b) => a.inicio - b.inicio);
   
-            if (!conflicto) {
+          let currentTime = inicio;
+  
+          for (const cita of citasOcupadas) {
+            // Mientras haya espacio antes de la siguiente cita, agrega bloques disponibles
+            while (currentTime + duracionServicio <= cita.inicio) {
               horariosDelDia.push({
-                hora: horaStr,
+                hora: `${String(Math.floor(currentTime / 60)).padStart(2, '0')}:${String(currentTime % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
               });
+              currentTime += duracionServicio;
             }
+            // Salta al final de la cita ocupada
+            currentTime = Math.max(currentTime, cita.fin);
+          }
   
-            inicio += 30;
+          // Bloques después de la última cita hasta el fin del horario
+          while (currentTime + duracionServicio <= fin) {
+            horariosDelDia.push({
+              hora: `${String(Math.floor(currentTime / 60)).padStart(2, '0')}:${String(currentTime % 60).padStart(2, '0')}`,
+              empleadoId: empleado.id,
+            });
+            currentTime += duracionServicio;
           }
         }
   
