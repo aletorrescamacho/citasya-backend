@@ -144,121 +144,148 @@ exports.agendarCita = async (req, res) => {
 
 
   
-exports.obtenerFechasYHorarios = async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const { servicioId, empleadoId } = req.query;
-
-    if (!servicioId) return res.status(400).json({ error: 'Falta el servicioId' });
-
-    const empresa = await prisma.empresa.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
-
-    const duracionServicio = (await prisma.servicio.findUnique({
-      where: { id: Number(servicioId) },
-      select: { duracion: true },
-    }))?.duracion || 30;
-
-    const empleadosVinculados = await prisma.empleadoServicio.findMany({
-      where: {
-        servicioId: Number(servicioId),
-        empleadoId: empleadoId ? Number(empleadoId) : undefined,
-        empleado: { empresaId: empresa.id },
-      },
-      include: {
-        empleado: {
+  exports.obtenerHorariosDisponibles = async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const { servicioId, fecha, empleadoId } = req.query;
+  
+      if (!servicioId || !fecha) {
+        return res.status(400).json({ error: 'Faltan parámetros obligatorios (servicioId y fecha)' });
+      }
+  
+      const empresa = await prisma.empresa.findUnique({
+        where: { slug }
+      });
+  
+      if (!empresa) {
+        return res.status(404).json({ error: 'Empresa no encontrada' });
+      }
+  
+      const servicio = await prisma.servicio.findUnique({
+        where: { id: parseInt(servicioId) }
+      });
+  
+      if (!servicio) {
+        return res.status(404).json({ error: 'Servicio no encontrado' });
+      }
+  
+      const duracionServicio = servicio.duracion; // en minutos
+  
+      const fechaObj = new Date(fecha + 'T12:00:00');
+      const weekdays = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+      const dayName = weekdays[fechaObj.getDay()];
+  
+      let empleados;
+  
+      if (empleadoId) {
+        empleados = await prisma.empleado.findMany({
+          where: {
+            id: parseInt(empleadoId),
+            empresaId: empresa.id,
+            servicios: {
+              some: { servicioId: parseInt(servicioId) }
+            }
+          },
           include: {
             horarios: true,
             citas: {
               where: {
-                fecha: {
-                  gte: new Date(),
-                  lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-                },
+                fecha: new Date(fecha),
                 estado: 'activa'
-              },
-              include: {
-                servicio: {
-                  select: { duracion: true },
-                },
-              },
-            },
+              }
+            }
+          }
+        });
+      } else {
+        empleados = await prisma.empleado.findMany({
+          where: {
+            empresaId: empresa.id,
+            servicios: {
+              some: { servicioId: parseInt(servicioId) }
+            }
           },
-        },
-      },
-    });
-
-    const fechasHorarios = [];
-
-    for (let i = 0; i < 15; i++) {
-      const fechaActual = new Date();
-      fechaActual.setDate(fechaActual.getDate() + i);
-      const dia = fechaActual.toLocaleDateString('es-VE', { weekday: 'long' }).toLowerCase();
-      const diaNormalizado = dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-      const fechaStr = fechaActual.toISOString().split('T')[0];
-
-      let horariosDelDia = [];
-
-      for (const { empleado } of empleadosVinculados) {
-        const horario = empleado.horarios.find(h =>
-          h.dia &&
-          h.dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() === diaNormalizado
-        );
-        if (!horario) continue;
-
-        const inicioTurno = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
-        const finTurno = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
-
-        // Citas ordenadas por inicio
-        const citasOcupadas = (empleado.citas || [])
-          .filter(cita => {
-            if (!cita.fecha || !cita.hora) return false;
-            return cita.fecha.toISOString().split('T')[0] === fechaStr;
-          })
-          .map(cita => {
-            if (!cita.hora) return null;
-            const horaCita = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1]);
-            const duracionCita = cita.servicio?.duracion || 30;
-            return { inicio: horaCita, fin: horaCita + duracionCita };
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.inicio - b.inicio);
-
-        // Recorre en bloques de 30 minutos
-        for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
-          // El bloque debe estar completamente libre
-          const haySolapamiento = citasOcupadas.some(cita =>
-            start < cita.fin && (start + duracionServicio) > cita.inicio
-          );
-          // LOG opcional para depuración
-          // console.log(`Empleado: ${empleado.nombre}, Bloque: ${start}-${start + duracionServicio}, Solapamiento: ${haySolapamiento}`);
-          if (!haySolapamiento) {
-            horariosDelDia.push({
-              hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
-              empleadoId: empleado.id,
-              empleadoNombre: empleado.nombre,
-            });
+          include: {
+            horarios: true,
+            citas: {
+              where: {
+                fecha: new Date(fecha),
+                estado: 'activa'
+              }
+            }
+          }
+        });
+      }
+  
+      const horariosDisponibles = [];
+  
+      for (const emp of empleados) {
+        const horariosDia = emp.horarios.filter(h => h.dia.toLowerCase() === dayName.toLowerCase());
+  
+        for (const h of horariosDia) {
+          let bloques = [];
+  
+          // Inicializamos los bloques desde la horaInicio hasta horaFin
+          const inicioHora = parseInt(h.horaInicio.split(':')[0]);
+          const inicioMin = parseInt(h.horaInicio.split(':')[1]);
+          const finHora = parseInt(h.horaFin.split(':')[0]);
+          const finMin = parseInt(h.horaFin.split(':')[1]);
+  
+          const startTotalMin = inicioHora * 60 + inicioMin;
+          const endTotalMin = finHora * 60 + finMin;
+  
+          // Agregamos las citas actuales del día
+          const citasOcupadas = emp.citas.map(cita => {
+            const citaHora = parseInt(cita.hora.split(':')[0]);
+            const citaMin = parseInt(cita.hora.split(':')[1]);
+            const inicioCita = citaHora * 60 + citaMin;
+            const finCita = inicioCita + duracionServicio; // ⬅️ Aquí deberías tener guardada la duración real de la cita si manejas servicios variables
+            return { inicio: inicioCita, fin: finCita };
+          });
+  
+          // Ordenamos las citas por inicio
+          citasOcupadas.sort((a, b) => a.inicio - b.inicio);
+  
+          let currentTime = startTotalMin;
+  
+          for (const cita of citasOcupadas) {
+            if (currentTime + duracionServicio <= cita.inicio) {
+              bloques.push({ inicio: currentTime, fin: cita.inicio });
+            }
+            currentTime = Math.max(currentTime, cita.fin);
+          }
+  
+          // Bloque después de la última cita hasta fin del horario
+          if (currentTime + duracionServicio <= endTotalMin) {
+            bloques.push({ inicio: currentTime, fin: endTotalMin });
+          }
+  
+          // Convertimos los bloques en horarios disponibles
+          for (const bloque of bloques) {
+            let horaActual = bloque.inicio;
+  
+            while (horaActual + duracionServicio <= bloque.fin) {
+              const horaInicioStr = `${Math.floor(horaActual / 60).toString().padStart(2, '0')}:${(horaActual % 60).toString().padStart(2, '0')}`;
+              const horaFinStr = `${Math.floor((horaActual + duracionServicio) / 60).toString().padStart(2, '0')}:${((horaActual + duracionServicio) % 60).toString().padStart(2, '0')}`;
+  
+              horariosDisponibles.push({
+                empleadoId: emp.id,
+                empleadoNombre: emp.nombre,
+                horaInicio: horaInicioStr,
+                horaFin: horaFinStr
+              });
+  
+              horaActual += duracionServicio; // Avanza en bloques del tamaño del servicio
+            }
           }
         }
       }
-
-      if (horariosDelDia.length) {
-        fechasHorarios.push({
-          fecha: fechaStr,
-          horarios: horariosDelDia,
-        });
-      }
+  
+      res.json(horariosDisponibles);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error al obtener horarios disponibles' });
     }
-
-    res.json(fechasHorarios);
-  } catch (err) {
-    console.error('Error en obtenerFechasYHorarios:', err);
-    res.status(500).json({ error: 'Error al obtener horarios', detalle: err.message });
-  }
-};
+  };
 
   exports.obtenerServiciosPorEmpresa = async (req, res) => {
     try {
