@@ -389,16 +389,9 @@ exports.agendarCita = async (req, res) => {
             })
             .sort((a, b) => a.inicio - b.inicio);
   
-          // Puntos de inicio posibles: inicio del turno, fin de cada cita, y cada 5 minutos desde el inicio del turno
-          let posiblesInicios = [inicioTurno, ...citasOcupadas.map(c => c.fin)];
-          for (let t = inicioTurno; t + duracionServicio <= finTurno; t += 5) {
-            posiblesInicios.push(t);
-          }
-          // Eliminar duplicados y ordenar
-          posiblesInicios = [...new Set(posiblesInicios)].sort((a, b) => a - b);
-  
-          for (const start of posiblesInicios) {
-            if (start + duracionServicio > finTurno) continue;
+          // Recorre en bloques de 30 minutos
+          for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
+            // El bloque debe estar completamente libre
             const haySolapamiento = citasOcupadas.some(cita =>
               start < cita.fin && (start + duracionServicio) > cita.inicio
             );
@@ -406,15 +399,11 @@ exports.agendarCita = async (req, res) => {
               horariosDelDia.push({
                 hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
+                empleadoNombre: empleado.nombre,
               });
             }
           }
         }
-  
-        // Elimina horarios duplicados (por si acaso)
-        horariosDelDia = horariosDelDia.filter(
-          (h, idx, arr) => arr.findIndex(x => x.hora === h.hora && x.empleadoId === h.empleadoId) === idx
-        );
   
         if (horariosDelDia.length) {
           fechasHorarios.push({
@@ -430,6 +419,7 @@ exports.agendarCita = async (req, res) => {
       res.status(500).json({ error: 'Error al obtener horarios' });
     }
   };
+  
   exports.obtenerEmpleadosPorEmpresa = async (req, res) => {
     try {
       const { slug } = req.params;
