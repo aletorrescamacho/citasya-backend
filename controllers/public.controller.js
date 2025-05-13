@@ -380,14 +380,22 @@ exports.agendarCita = async (req, res) => {
           const finTurno = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
   
           // Citas ordenadas por inicio
-          const citasOcupadas = empleado.citas
-            .filter(cita => cita.fecha.toISOString().split('T')[0] === fechaStr)
+          const citasOcupadas = (empleado.citas || [])
+            .filter(cita => {
+              if (!cita.fecha || !cita.hora) return false;
+              return cita.fecha.toISOString().split('T')[0] === fechaStr;
+            })
             .map(cita => {
+              if (!cita.hora) return null;
               const horaCita = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1]);
               const duracionCita = cita.servicio?.duracion || 30;
               return { inicio: horaCita, fin: horaCita + duracionCita };
             })
+            .filter(Boolean)
             .sort((a, b) => a.inicio - b.inicio);
+  
+          // LOG para depuración
+          // console.log('Citas ocupadas para', empleado.nombre, fechaStr, citasOcupadas);
   
           // Recorre en bloques de 30 minutos
           for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
@@ -395,6 +403,8 @@ exports.agendarCita = async (req, res) => {
             const haySolapamiento = citasOcupadas.some(cita =>
               start < cita.fin && (start + duracionServicio) > cita.inicio
             );
+            // LOG para depuración
+            // console.log(`Empleado: ${empleado.nombre}, Bloque: ${start}-${start + duracionServicio}, Solapamiento: ${haySolapamiento}`);
             if (!haySolapamiento) {
               horariosDelDia.push({
                 hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
@@ -415,8 +425,8 @@ exports.agendarCita = async (req, res) => {
   
       res.json(fechasHorarios);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Error al obtener horarios' });
+      console.error('Error en obtenerFechasYHorarios:', err);
+      res.status(500).json({ error: 'Error al obtener horarios', detalle: err.message });
     }
   };
   
