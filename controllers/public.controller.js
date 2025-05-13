@@ -364,7 +364,7 @@ exports.agendarCita = async (req, res) => {
         const fechaActual = new Date();
         fechaActual.setDate(fechaActual.getDate() + i);
         const dia = fechaActual.toLocaleDateString('es-VE', { weekday: 'long' }).toLowerCase();
-        const diaNormalizado = dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const diaNormalizado = dia.normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
         const fechaStr = fechaActual.toISOString().split('T')[0];
   
         let horariosDelDia = [];
@@ -372,14 +372,13 @@ exports.agendarCita = async (req, res) => {
         for (const { empleado } of empleadosVinculados) {
           const horario = empleado.horarios.find(h =>
             h.dia &&
-            h.dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() === diaNormalizado
+            h.dia.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() === diaNormalizado
           );
           if (!horario) continue;
   
           const inicioTurno = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
           const finTurno = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
   
-          // Citas ordenadas por inicio
           const citasOcupadas = (empleado.citas || [])
             .filter(cita => {
               if (!cita.fecha || !cita.hora) return false;
@@ -387,24 +386,18 @@ exports.agendarCita = async (req, res) => {
             })
             .map(cita => {
               if (!cita.hora) return null;
-              const horaCita = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1]);
+              const horaCita = parseInt(cita.hora.split(":" )[0]) * 60 + parseInt(cita.hora.split(":" )[1]);
               const duracionCita = cita.servicio?.duracion || 30;
               return { inicio: horaCita, fin: horaCita + duracionCita };
             })
             .filter(Boolean)
             .sort((a, b) => a.inicio - b.inicio);
   
-          // LOG para depuración
-          // console.log('Citas ocupadas para', empleado.nombre, fechaStr, citasOcupadas);
-  
-          // Recorre en bloques de 30 minutos
           for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
-            // El bloque debe estar completamente libre
             const haySolapamiento = citasOcupadas.some(cita =>
               start < cita.fin && (start + duracionServicio) > cita.inicio
             );
-            // LOG para depuración
-            // console.log(`Empleado: ${empleado.nombre}, Bloque: ${start}-${start + duracionServicio}, Solapamiento: ${haySolapamiento}`);
+  
             if (!haySolapamiento) {
               horariosDelDia.push({
                 hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
