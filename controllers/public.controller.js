@@ -364,7 +364,7 @@ exports.agendarCita = async (req, res) => {
         const fechaActual = new Date();
         fechaActual.setDate(fechaActual.getDate() + i);
         const dia = fechaActual.toLocaleDateString('es-VE', { weekday: 'long' }).toLowerCase();
-        const diaNormalizado = dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const diaNormalizado = dia.normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
         const fechaStr = fechaActual.toISOString().split('T')[0];
   
         let horariosDelDia = [];
@@ -372,7 +372,7 @@ exports.agendarCita = async (req, res) => {
         for (const { empleado } of empleadosVinculados) {
           const horario = empleado.horarios.find(h =>
             h.dia &&
-            h.dia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() === diaNormalizado
+            h.dia.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() === diaNormalizado
           );
           if (!horario) continue;
   
@@ -391,15 +391,20 @@ exports.agendarCita = async (req, res) => {
             const solapamiento = citasOcupadas.some(cita =>
               start < cita.fin && (start + duracionServicio) > cita.inicio
             );
-            const bloqueSolapaCitaFutura = citasOcupadas.some(cita =>
-              cita.inicio < (start + duracionServicio) && (start + duracionServicio) > cita.inicio && start < cita.inicio
-            );
   
-            if (!solapamiento && !bloqueSolapaCitaFutura) {
+            if (!solapamiento) {
               horariosDelDia.push({
                 hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
                 empleadoNombre: empleado.nombre,
+                disponible: true
+              });
+            } else {
+              horariosDelDia.push({
+                hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
+                empleadoId: empleado.id,
+                empleadoNombre: empleado.nombre,
+                disponible: false
               });
             }
           }
@@ -419,6 +424,7 @@ exports.agendarCita = async (req, res) => {
       res.status(500).json({ error: 'Error al obtener horarios', detalle: err.message });
     }
   };
+  
   
   
   exports.obtenerEmpleadosPorEmpresa = async (req, res) => {
