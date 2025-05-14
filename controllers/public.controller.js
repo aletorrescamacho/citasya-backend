@@ -324,10 +324,11 @@ exports.agendarCita = async (req, res) => {
       });
       if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
   
-      const duracionServicio = (await prisma.servicio.findUnique({
+      const servicioSeleccionado = await prisma.servicio.findUnique({
         where: { id: Number(servicioId) },
         select: { duracion: true },
-      }))?.duracion || 30;
+      });
+      const duracionServicio = servicioSeleccionado?.duracion || 30; // Obtén la duración del servicio actual
   
       const empleadosVinculados = await prisma.empleadoServicio.findMany({
         where: {
@@ -345,7 +346,7 @@ exports.agendarCita = async (req, res) => {
                     gte: new Date(),
                     lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
                   },
-                  estado: 'activa'
+                  estado: 'activa',
                 },
                 include: {
                   servicio: {
@@ -388,8 +389,9 @@ exports.agendarCita = async (req, res) => {
             });
   
           for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
+            const finBloque = start + duracionServicio;
             const solapamiento = citasOcupadas.some(cita =>
-              start < cita.fin && (start + duracionServicio) > cita.inicio
+              start < cita.fin && finBloque > cita.inicio
             );
   
             if (!solapamiento) {
@@ -397,14 +399,7 @@ exports.agendarCita = async (req, res) => {
                 hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
                 empleadoId: empleado.id,
                 empleadoNombre: empleado.nombre,
-                disponible: true
-              });
-            } else {
-              horariosDelDia.push({
-                hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
-                empleadoId: empleado.id,
-                empleadoNombre: empleado.nombre,
-                disponible: false
+                disponible: true,
               });
             }
           }
@@ -413,7 +408,7 @@ exports.agendarCita = async (req, res) => {
         if (horariosDelDia.length) {
           fechasHorarios.push({
             fecha: fechaStr,
-            horarios: horariosDelDia,
+            horarios: horariosDelDia.filter(h => h.disponible), // Solo enviamos los horarios disponibles
           });
         }
       }
