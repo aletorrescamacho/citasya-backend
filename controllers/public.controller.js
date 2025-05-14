@@ -58,7 +58,7 @@ exports.agendarCita = async (req, res) => {
     } = req.body;
 
     if (!clienteNombre || !cedula || !correo || !telefono || !servicioId || !fecha || !hora) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios' );
+      return res.status(400).json({ error: 'Faltan campos obligatorios'} );
     }
 
     const empresa = await prisma.empresa.findUnique({ where: { slug } });
