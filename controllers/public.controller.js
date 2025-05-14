@@ -310,7 +310,7 @@ exports.agendarCita = async (req, res) => {
     }
   };
 
-
+//
   exports.obtenerFechasYHorarios = async (req, res) => {
     try {
       const { slug } = req.params;
