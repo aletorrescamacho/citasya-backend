@@ -45,7 +45,7 @@ const nodemailer = require('nodemailer');
 
 exports.agendarCita = async (req, res) => {
   try {
-    const { slug } = req.params
+    const { slug } = req.params;
     const {
       clienteNombre,
       cedula,
@@ -54,70 +54,118 @@ exports.agendarCita = async (req, res) => {
       servicioId,
       fecha,
       hora,
-      empleadoId // opcional
-    } = req.body
+      empleadoId, // Ahora puede ser undefined
+    } = req.body;
 
     if (!clienteNombre || !cedula || !correo || !telefono || !servicioId || !fecha || !hora) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios' })
+      return res.status(400).json({ error: 'Faltan campos obligatorios' );
     }
 
-    const empresa = await prisma.empresa.findUnique({ where: { slug } })
-    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' })
+    const empresa = await prisma.empresa.findUnique({ where: { slug } });
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
 
-    const servicio = await prisma.servicio.findUnique({ where: { id: servicioId } })
-    if (!servicio) return res.status(404).json({ error: 'Servicio no encontrado' })
+    const servicio = await prisma.servicio.findUnique({ where: { id: servicioId } });
+    if (!servicio) return res.status(404).json({ error: 'Servicio no encontrado' });
 
-    const duracionMinutos = servicio.duracion
+    const duracionMinutos = servicio.duracion;
+    const fechaObj = new Date(fecha + 'T12:00:00');
+    const diaSemana = fechaObj.toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+    const horaInicioMin = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
+    const horaFinMin = horaInicioMin + duracionMinutos;
 
-    const empleadosVinculados = await prisma.empleadoServicio.findMany({
-      where: {
-        servicioId,
-        empleado: { empresaId: empresa.id }
-      },
-      include: {
-        empleado: {
-          include: {
-            horarios: true,
-            citas: {
-              where: {
-                fecha: new Date(fecha),
-                estado: 'activa'
+    let empleadoAsignado;
+
+    if (empleadoId) {
+      empleadoAsignado = await prisma.empleado.findUnique({ where: { id: empleadoId } });
+      if (!empleadoAsignado) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+      // Verificamos si el empleado está disponible en ese horario (similar a la lógica anterior)
+      const empleadoServicio = await prisma.empleadoServicio.findFirst({
+        where: { servicioId, empleadoId },
+        include: {
+          empleado: {
+            include: {
+              horarios: { where: { dia: { equals: diaSemana } } },
+              citas: {
+                where: {
+                  fecha: fechaObj,
+                  estado: 'activa',
+                },
+                include: { servicio: { select: { duracion: true } } },
               },
-              include: {
-                servicio: { select: { duracion: true } }
-              }
-            }
-          }
-        }
+            },
+          },
+        },
+      });
+
+      if (!empleadoServicio?.empleado?.horarios.some(h => {
+        const inicioHorario = parseInt(h.horaInicio.split(':')[0]) * 60 + parseInt(h.horaInicio.split(':')[1]);
+        const finHorario = parseInt(h.horaFin.split(':')[0]) * 60 + parseInt(h.horaFin.split(':')[1]);
+        return horaInicioMin >= inicioHorario && horaFinMin <= finHorario;
+      })) {
+        return res.status(409).json({ error: 'El empleado seleccionado no está disponible en ese horario' });
       }
-    })
 
-    const diaSemana = new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()
-    const horaInicioMin = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1])
-    const horaFinMin = horaInicioMin + duracionMinutos
+      const hayConflicto = empleadoServicio.empleado.citas.some(cita => {
+        const citaInicio = parseInt(cita.hora.split(':')[0]) * 60 + parseInt(cita.hora.split(':')[1]);
+        const citaFin = citaInicio + (cita.servicio?.duracion || 30);
+        return horaInicioMin < citaFin && horaFinMin > citaInicio;
+      });
 
-    const empleadoDisponible = empleadosVinculados.find(({ empleado }) => {
-      if (empleadoId && empleado.id !== empleadoId) return false
+      if (hayConflicto) {
+        return res.status(409).json({ error: 'El empleado seleccionado ya tiene una cita en ese horario' });
+      }
 
-      const horario = empleado.horarios.find(h => h.dia.toLowerCase() === diaSemana)
-      if (!horario) return false
+    } else {
+      // Seleccionar un empleado aleatorio
+      const empleadosDisponibles = await prisma.empleadoServicio.findMany({
+        where: {
+          servicioId,
+          empleado: {
+            empresaId: empresa.id,
+            horarios: {
+              some: {
+                dia: { equals: diaSemana },
+                horaInicio: { lte: hora },
+                horaFin: { gte: `${String(Math.floor(horaFinMin / 60)).padStart(2, '0')}:${String(horaFinMin % 60).padStart(2, '0')}` },
+              },
+            },
+            citas: {
+              none: {
+                fecha: fechaObj,
+                hora: { lte: `${String(Math.floor(horaFinMin / 60)).padStart(2, '0')}:${String(horaFinMin % 60).padStart(2, '0')}` },
+                estado: 'activa',
+                servicio: {
+                  duracion: { gt: 0 } // Asegurarse de que la duración esté definida
+                },
+                AND: [
+                  { hora: { gte: hora } },
+                  {
+                    OR: [
+                      { servicio: { duracion: { equals: duracionMinutos } } },
+                      {
+                        servicio: {
+                          duracion: {
+                            equals: 30 // Considerar el múltiplo base
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ],
+              },
+            },
+          },
+        },
+        include: { empleado: true },
+      });
 
-      const inicioHorario = parseInt(horario.horaInicio.split(':')[0]) * 60 + parseInt(horario.horaInicio.split(':')[1])
-      const finHorario = parseInt(horario.horaFin.split(':')[0]) * 60 + parseInt(horario.horaFin.split(':')[1])
+      if (empleadosDisponibles.length === 0) {
+        return res.status(409).json({ error: 'No hay empleados disponibles en ese horario' });
+      }
 
-      if (horaInicioMin < inicioHorario || horaFinMin > finHorario) return false
-
-      const hayConflicto = empleado.citas.some(cita => {
-        const citaInicio = parseInt(cita.hora.split(':')[0]) * 60 + parseInt(cita.hora.split(':')[1])
-        const citaFin = citaInicio + (cita.servicio?.duracion || 30)
-        return horaInicioMin < citaFin && horaFinMin > citaInicio
-      })
-
-      return !hayConflicto
-    })
-
-    if (!empleadoDisponible) {
-      return res.status(409).json({ error: 'No hay disponibilidad para ese horario' })
+      const indiceAleatorio = Math.floor(Math.random() * empleadosDisponibles.length);
+      empleadoAsignado = empleadosDisponibles[indiceAleatorio].empleado;
     }
 
     const cita = await prisma.cita.create({
@@ -126,23 +174,21 @@ exports.agendarCita = async (req, res) => {
         cedula,
         correo,
         telefono,
-        fecha: new Date(fecha),
+        fecha: fechaObj,
         hora,
         estado: 'activa',
         empresa: { connect: { id: empresa.id } },
         servicio: { connect: { id: servicioId } },
-        empleado: { connect: { id: empleadoDisponible.empleado.id } }
-      }
-    })
+        empleado: { connect: { id: empleadoAsignado.id } },
+      },
+    });
 
-    res.status(201).json({ mensaje: 'Cita agendada exitosamente', cita })
+    res.status(201).json({ mensaje: 'Cita agendada exitosamente', cita });
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'Error al agendar cita' })
+    console.error(err);
+    res.status(500).json({ error: 'Error al agendar cita' });
   }
-}
-
-
+};
   
   exports.obtenerHorariosDisponibles = async (req, res) => {
     try {
@@ -311,115 +357,119 @@ exports.agendarCita = async (req, res) => {
   };
 
 //
-  exports.obtenerFechasYHorarios = async (req, res) => {
-    try {
-      const { slug } = req.params;
-      const { servicioId, empleadoId } = req.query;
-  
-      if (!servicioId) return res.status(400).json({ error: 'Falta el servicioId' });
-  
-      const empresa = await prisma.empresa.findUnique({
-        where: { slug },
-        select: { id: true },
-      });
-      if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
-  
-      const servicioSeleccionado = await prisma.servicio.findUnique({
-        where: { id: Number(servicioId) },
-        select: { duracion: true },
-      });
-      const duracionServicio = servicioSeleccionado?.duracion || 30; // Obtén la duración del servicio actual
-  
-      const empleadosVinculados = await prisma.empleadoServicio.findMany({
-        where: {
-          servicioId: Number(servicioId),
-          empleadoId: empleadoId ? Number(empleadoId) : undefined,
-          empleado: { empresaId: empresa.id },
-        },
-        include: {
-          empleado: {
-            include: {
-              horarios: true,
-              citas: {
-                where: {
-                  fecha: {
-                    gte: new Date(),
-                    lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-                  },
-                  estado: 'activa',
+exports.obtenerFechasYHorarios = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { servicioId, empleadoId } = req.query;
+
+    if (!servicioId) return res.status(400).json({ error: 'Falta el servicioId' });
+
+    const empresa = await prisma.empresa.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const servicioSeleccionado = await prisma.servicio.findUnique({
+      where: { id: Number(servicioId) },
+      select: { duracion: true },
+    });
+    const duracionServicio = servicioSeleccionado?.duracion || 30;
+
+    const empleadosVinculados = await prisma.empleadoServicio.findMany({
+      where: {
+        servicioId: Number(servicioId),
+        empleado: { empresaId: empresa.id },
+      },
+      include: {
+        empleado: {
+          include: {
+            horarios: true,
+            citas: {
+              where: {
+                fecha: {
+                  gte: new Date(),
+                  lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
                 },
-                include: {
-                  servicio: {
-                    select: { duracion: true },
-                  },
-                },
+                estado: 'activa',
+              },
+              include: {
+                servicio: { select: { duracion: true } },
               },
             },
           },
         },
-      });
-  
-      const fechasHorarios = [];
-  
-      for (let i = 0; i < 15; i++) {
-        const fechaActual = new Date();
-        fechaActual.setDate(fechaActual.getDate() + i);
-        const dia = fechaActual.toLocaleDateString('es-VE', { weekday: 'long' }).toLowerCase();
-        const diaNormalizado = dia.normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
-        const fechaStr = fechaActual.toISOString().split('T')[0];
-  
-        let horariosDelDia = [];
-  
-        for (const { empleado } of empleadosVinculados) {
-          const horario = empleado.horarios.find(h =>
-            h.dia &&
-            h.dia.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() === diaNormalizado
+      },
+    });
+
+    const fechasHorarios = [];
+
+    for (let i = 0; i < 15; i++) {
+      const fechaActual = new Date();
+      fechaActual.setDate(fechaActual.getDate() + i);
+      const dia = fechaActual.toLocaleDateString('es-VE', { weekday: 'long' }).toLowerCase();
+      const diaNormalizado = dia.normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+      const fechaStr = fechaActual.toISOString().split('T')[0];
+
+      let horariosDelDia = [];
+      const horariosUnicos = new Set(); // Para evitar repeticiones
+
+      for (const { empleado } of empleadosVinculados) {
+        const horario = empleado.horarios.find(h =>
+          h.dia &&
+          h.dia.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() === diaNormalizado
+        );
+        if (!horario) continue;
+
+        const inicioTurno = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
+        const finTurno = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
+
+        const citasOcupadas = (empleado.citas || [])
+          .filter(cita => cita.fecha?.toISOString().split('T')[0] === fechaStr)
+          .map(cita => {
+            const horaCita = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1]);
+            const duracionCita = cita.servicio?.duracion || 30;
+            return { inicio: horaCita, fin: horaCita + duracionCita };
+          });
+
+        for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
+          const finBloque = start + duracionServicio;
+          const solapamiento = citasOcupadas.some(cita =>
+            start < cita.fin && finBloque > cita.inicio
           );
-          if (!horario) continue;
-  
-          const inicioTurno = parseInt(horario.horaInicio.split(":")[0]) * 60 + parseInt(horario.horaInicio.split(":")[1]);
-          const finTurno = parseInt(horario.horaFin.split(":")[0]) * 60 + parseInt(horario.horaFin.split(":")[1]);
-  
-          const citasOcupadas = (empleado.citas || [])
-            .filter(cita => cita.fecha?.toISOString().split('T')[0] === fechaStr)
-            .map(cita => {
-              const horaCita = parseInt(cita.hora.split(":")[0]) * 60 + parseInt(cita.hora.split(":")[1]);
-              const duracionCita = cita.servicio?.duracion || 30;
-              return { inicio: horaCita, fin: horaCita + duracionCita };
-            });
-  
-          for (let start = inicioTurno; start + duracionServicio <= finTurno; start += 30) {
-            const finBloque = start + duracionServicio;
-            const solapamiento = citasOcupadas.some(cita =>
-              start < cita.fin && finBloque > cita.inicio
-            );
-  
-            if (!solapamiento) {
+          const horaInicioStr = `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`;
+
+          if (!solapamiento) {
+            if (!empleadoId) {
+              if (!horariosUnicos.has(horaInicioStr)) {
+                horariosDelDia.push({ hora: horaInicioStr, empleadoId: empleado.id }); // Guardamos el empleadoId para la asignación aleatoria
+                horariosUnicos.add(horaInicioStr);
+              }
+            } else {
               horariosDelDia.push({
-                hora: `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`,
+                hora: horaInicioStr,
                 empleadoId: empleado.id,
                 empleadoNombre: empleado.nombre,
-                disponible: true,
               });
             }
           }
         }
-  
-        if (horariosDelDia.length) {
-          fechasHorarios.push({
-            fecha: fechaStr,
-            horarios: horariosDelDia.filter(h => h.disponible), // Solo enviamos los horarios disponibles
-          });
-        }
       }
-  
-      res.json(fechasHorarios);
-    } catch (err) {
-      console.error('Error en obtenerFechasYHorarios:', err);
-      res.status(500).json({ error: 'Error al obtener horarios', detalle: err.message });
+
+      if (horariosDelDia.length) {
+        fechasHorarios.push({
+          fecha: fechaStr,
+          horarios: horariosDelDia,
+        });
+      }
     }
-  };
-  
+
+    res.json(fechasHorarios);
+  } catch (err) {
+    console.error('Error en obtenerFechasYHorarios:', err);
+    res.status(500).json({ error: 'Error al obtener horarios', detalle: err.message });
+  }
+};
   
   
   exports.obtenerEmpleadosPorEmpresa = async (req, res) => {
