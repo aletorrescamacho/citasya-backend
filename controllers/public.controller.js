@@ -607,13 +607,12 @@ exports.obtenerFechasYHorarios = async (req, res) => {
   
       const citaExistente = await prisma.cita.findUnique({
         where: {
-          id: parseInt(idCita), // Convierte idCita a entero
+          id: parseInt(idCita),
           cedula: cedula,
           empresaId: empresa.id,
           estado: 'activa',
         },
         include: {
-          cliente: true,
           servicio: true,
           empresa: true,
         },
@@ -625,7 +624,7 @@ exports.obtenerFechasYHorarios = async (req, res) => {
   
       const citaCancelada = await prisma.cita.update({
         where: {
-          id: parseInt(idCita), // Convierte idCita a entero
+          id: parseInt(idCita),
           cedula: cedula,
           empresaId: empresa.id,
         },
@@ -646,7 +645,7 @@ exports.obtenerFechasYHorarios = async (req, res) => {
       // *** Construcción del mensaje del correo de cancelación ***
       const mailOptions = {
         from: process.env.GMAIL_USER,
-        to: citaExistente.correo, // Asumiendo que el correo del cliente está en la cita
+        to: citaExistente.correo,
         subject: `Confirmación de Cancelación de su Cita en ${citaExistente.empresa.nombre}`,
         html: `
           <p>Estimado/a ${citaExistente.clienteNombre},</p>
