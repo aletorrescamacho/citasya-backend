@@ -548,3 +548,135 @@ exports.obtenerFechasYHorarios = async (req, res) => {
       res.status(500).json({ error: 'Error al obtener empleados' });
     }
   };
+
+
+
+  exports.buscarCitaParaCancelar = async (req, res) => {
+    const { slug } = req.params;
+    const { idCita, cedula } = req.body;
+  
+    if (!idCita || !cedula) {
+      return res.status(400).json({ error: 'Faltan el ID de la cita y la cédula.' });
+    }
+  
+    try {
+      const empresa = await prisma.empresa.findUnique({ where: { slug } });
+      if (!empresa) {
+        return res.status(404).json({ error: 'Empresa no encontrada.' });
+      }
+  
+      const cita = await prisma.cita.findUnique({
+        where: {
+          id: idCita,
+          cedula,
+          empresaId: empresa.id,
+          estado: 'activa', // Solo buscar citas activas para cancelar
+        },
+        include: {
+          servicio: true,
+          empleado: true,
+          empresa: true,
+        },
+      });
+  
+      if (!cita) {
+        return res.status(404).json({ error: 'No se encontró la cita con los datos proporcionados.' });
+      }
+  
+      res.status(200).json(cita);
+    } catch (error) {
+      console.error('Error al buscar la cita:', error);
+      res.status(500).json({ error: 'Error al buscar la cita.' });
+    } finally {
+      await prisma.$disconnect();
+    }
+  };
+  
+  // Función para cancelar una cita
+  exports.cancelarCita = async (req, res) => {
+    const { slug, idCita } = req.params;
+    const { cedula } = req.body;
+  
+    if (!idCita || !cedula) {
+      return res.status(400).json({ error: 'Faltan el ID de la cita y la cédula.' });
+    }
+  
+    try {
+      const empresa = await prisma.empresa.findUnique({ where: { slug } });
+      if (!empresa) {
+        return res.status(404).json({ error: 'Empresa no encontrada.' });
+      }
+  
+      const citaExistente = await prisma.cita.findUnique({
+        where: {
+          id: idCita,
+          cedula,
+          empresaId: empresa.id,
+          estado: 'activa',
+        },
+        include: {
+          cliente: true, // Asumiendo que tienes un campo cliente relacionado
+          servicio: true,
+          empresa: true,
+        },
+      });
+  
+      if (!citaExistente) {
+        return res.status(404).json({ error: 'No se encontró la cita con los datos proporcionados o ya ha sido cancelada.' });
+      }
+  
+      const citaCancelada = await prisma.cita.update({
+        where: {
+          id: idCita,
+          cedula,
+          empresaId: empresa.id,
+        },
+        data: {
+          estado: 'cancelada',
+        },
+      });
+  
+      // *** Configuración del transporter ***
+      const transporter = nodemailer.createTransport({
+        service: 'Gmail',
+        auth: {
+          user: process.env.GMAIL_USER,
+          pass: process.env.GMAIL_PASS,
+        },
+      });
+  
+      // *** Construcción del mensaje del correo de cancelación ***
+      const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: citaExistente.correo, // Asumiendo que el correo del cliente está en la cita
+        subject: `Confirmación de Cancelación de su Cita en ${citaExistente.empresa.nombre}`,
+        html: `
+          <p>Estimado/a ${citaExistente.clienteNombre},</p>
+          <p>Le confirmamos que su cita con ID: <strong>${citaExistente.id}</strong> ha sido cancelada exitosamente.</p>
+          <p>Detalles de la cita cancelada:</p>
+          <ul>
+            <li><strong>Servicio:</strong> ${citaExistente.servicio.nombre}</li>
+            <li><strong>Fecha:</strong> ${citaExistente.fecha.toLocaleDateString()}</li>
+            <li><strong>Hora:</strong> ${citaExistente.hora}</li>
+          </ul>
+          <p>Lamentamos que no pueda asistir. Si desea reprogramar, por favor visite nuestro sitio web.</p>
+          <p>Atentamente,<br>${citaExistente.empresa.nombre}</p>
+        `,
+      };
+  
+      // *** Envío del correo electrónico de cancelación ***
+      transporter.sendMail(mailOptions, function (error, info) {
+        if (error) {
+          console.error('Error al enviar el correo de cancelación:', error);
+        } else {
+          console.log('Correo de cancelación enviado:', info.response);
+        }
+        res.status(200).json({ mensaje: 'Cita cancelada exitosamente.' });
+      });
+    } catch (error) {
+      console.error('Error al cancelar la cita:', error);
+      res.status(500).json({ error: 'Error al cancelar la cita.' });
+    } finally {
+      await prisma.$disconnect();
+    }
+  };
