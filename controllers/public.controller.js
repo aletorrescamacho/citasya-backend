@@ -46,9 +46,6 @@ exports.getInfoEmpresa = async (req, res) => {
 
 const nodemailer = require('nodemailer');
 
-const nodemailer = require('nodemailer');
-require('dotenv').config();
-
 exports.agendarCita = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -187,55 +184,9 @@ exports.agendarCita = async (req, res) => {
         servicio: { connect: { id: servicioId } },
         empleado: { connect: { id: empleadoAsignado.id } },
       },
-      include: {
-        empresa: true,
-        servicio: true,
-        empleado: true,
-      },
     });
 
-    // *** Configuración del transporter ***
-    const transporter = nodemailer.createTransport({
-      service: 'Gmail',
-      auth: {
-        user: process.env.GMAIL_USER, // Asegúrate de tener esta variable en .env
-        pass: process.env.GMAIL_PASS, // Asegúrate de tener esta variable en .env
-      },
-    });
-
-    // *** Construcción del mensaje del correo ***
-    const mailOptions = {
-      from: process.env.GMAIL_USER, // Usa tu dirección de Gmail
-      to: correo, // El correo del cliente
-      subject: `Confirmación de su cita en ${cita.empresa.nombre}`,
-      html: `
-        <p>Estimado/a ${clienteNombre},</p>
-        <p>Su cita ha sido confirmada con los siguientes detalles:</p>
-        <ul>
-          <li><strong>ID de Cita:</strong> ${cita.id}</li>
-          <li><strong>Servicio:</strong> ${cita.servicio.nombre}</li>
-          <li><strong>Fecha:</strong> ${cita.fecha.toLocaleDateString()}</li>
-          <li><strong>Hora:</strong> ${cita.hora}</li>
-          ${cita.empleado ? `<li><strong>Profesional:</strong> ${cita.empleado.nombre}</li>` : '<li><strong>Profesional:</strong> No asignado</li>'}
-          <li><strong>Lugar:</strong> ${cita.empresa.nombre}</li>
-          <li><strong>Dirección:</strong> ${cita.empresa.direccion || 'No especificada'}</li>
-        </ul>
-        <p>Gracias por su reserva.</p>
-        <p>Atentamente,<br>${cita.empresa.nombre}</p>
-      `,
-    };
-
-    // *** Envío del correo electrónico ***
-    transporter.sendMail(mailOptions, function(error, info) {
-      if (error) {
-        console.log('Error al enviar el correo de confirmación:', error);
-        // Aquí podrías registrar el error, pero no necesariamente fallar la reserva
-      } else {
-        console.log('Correo de confirmación enviado:', info.response);
-      }
-      res.status(201).json({ mensaje: 'Cita agendada exitosamente', cita });
-    });
-
+    res.status(201).json({ mensaje: 'Cita agendada exitosamente', cita });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al agendar cita' });
