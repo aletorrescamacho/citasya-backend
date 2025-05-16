@@ -565,14 +565,14 @@ exports.obtenerFechasYHorarios = async (req, res) => {
   
       const cita = await prisma.cita.findUnique({
         where: {
-          id: parseInt(idCita), // Convierte idCita a entero
+          id: parseInt(idCita),
           cedula: cedula,
           empresaId: empresa.id,
           estado: 'activa',
         },
         include: {
           servicio: true,
-          empleado: true,
+          empleado: true, // Incluimos la información del empleado (profesional)
           empresa: true,
         },
       });
@@ -585,6 +585,95 @@ exports.obtenerFechasYHorarios = async (req, res) => {
     } catch (error) {
       console.error('Error al buscar la cita:', error);
       res.status(500).json({ error: 'Error al buscar la cita.' });
+    } finally {
+      await prisma.$disconnect();
+    }
+  };
+  
+  exports.cancelarCita = async (req, res) => {
+    const { slug, idCita } = req.params;
+    const { cedula } = req.body;
+  
+    if (!idCita || !cedula) {
+      return res.status(400).json({ error: 'Faltan el ID de la cita y la cédula.' });
+    }
+  
+    try {
+      const empresa = await prisma.empresa.findUnique({ where: { slug } });
+      if (!empresa) {
+        return res.status(404).json({ error: 'Empresa no encontrada.' });
+      }
+  
+      const citaExistente = await prisma.cita.findUnique({
+        where: {
+          id: parseInt(idCita),
+          cedula: cedula,
+          empresaId: empresa.id,
+          estado: 'activa',
+        },
+        include: {
+          servicio: true,
+          empresa: true,
+          empleado: true, // Incluimos la información del empleado para el correo
+        },
+      });
+  
+      if (!citaExistente) {
+        return res.status(404).json({ error: 'No se encontró la cita con los datos proporcionados o ya ha sido cancelada.' });
+      }
+  
+      const citaCancelada = await prisma.cita.update({
+        where: {
+          id: parseInt(idCita),
+          cedula: cedula,
+          empresaId: empresa.id,
+        },
+        data: {
+          estado: 'cancelada',
+        },
+      });
+  
+      // *** Configuración del transporter ***
+      const transporter = nodemailer.createTransport({
+        service: 'Gmail',
+        auth: {
+          user: process.env.GMAIL_USER,
+          pass: process.env.GMAIL_PASS,
+        },
+      });
+  
+      // *** Construcción del mensaje del correo de cancelación ***
+      const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: citaExistente.correo,
+        subject: `Confirmación de Cancelación de su Cita en ${citaExistente.empresa.nombre}`,
+        html: `
+          <p>Estimado/a ${citaExistente.clienteNombre},</p>
+          <p>Le confirmamos que su cita con ID: <strong>${citaExistente.id}</strong> ha sido cancelada exitosamente.</p>
+          <p>Detalles de la cita cancelada:</p>
+          <ul>
+            <li><strong>Servicio:</strong> ${citaExistente.servicio.nombre}</li>
+            <li><strong>Fecha:</strong> ${citaExistente.fecha.toLocaleDateString()}</li>
+            <li><strong>Hora:</strong> ${citaExistente.hora}</li>
+            ${citaExistente.empleado ? `<li><strong>Profesional:</strong> ${citaExistente.empleado.nombre}</li>` : ''}
+          </ul>
+          <p>Lamentamos que no pueda asistir. Si desea reprogramar, por favor visite nuestro sitio web.</p>
+          <p>Atentamente,<br>${citaExistente.empresa.nombre}</p>
+        `,
+      };
+  
+      // *** Envío del correo electrónico de cancelación ***
+      transporter.sendMail(mailOptions, function (error, info) {
+        if (error) {
+          console.error('Error al enviar el correo de cancelación:', error);
+        } else {
+          console.log('Correo de cancelación enviado:', info.response);
+        }
+        res.status(200).json({ mensaje: 'Cita cancelada exitosamente.' });
+      });
+    } catch (error) {
+      console.error('Error al cancelar la cita:', error);
+      res.status(500).json({ error: 'Error al cancelar la cita.' });
     } finally {
       await prisma.$disconnect();
     }
