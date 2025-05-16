@@ -52,10 +52,10 @@ router.get('/:slug/fechas-horarios', publicController.obtenerFechasYHorarios);
 
 
 // Ruta para buscar una cita para cancelar
-router.post('/empresa/:slug/citas/buscar', publicController.buscarCitaParaCancelar);
+router.post('/:slug/buscar', publicController.buscarCitaParaCancelar);
 
 // Ruta para cancelar una cita por ID
-router.post('/empresa/:slug/citas/:idCita/cancelar', publicController.cancelarCita);
+router.post('/:slug/:idCita/cancelar', publicController.cancelarCita);
 
 
 module.exports = router;
