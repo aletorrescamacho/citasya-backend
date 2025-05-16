@@ -2,9 +2,9 @@
   "name": "citasya-backend",
   "version": "1.0.0",
   "main": "hola.js",
- "scripts": {
-  "start": "node index.js"
-},
+  "scripts": {
+    "start": "node index.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aletorrescamacho/citasya-backend.git"
