@@ -549,8 +549,6 @@ exports.obtenerFechasYHorarios = async (req, res) => {
     }
   };
 
-
-
   exports.buscarCitaParaCancelar = async (req, res) => {
     const { slug } = req.params;
     const { idCita, cedula } = req.body;
@@ -567,10 +565,10 @@ exports.obtenerFechasYHorarios = async (req, res) => {
   
       const cita = await prisma.cita.findUnique({
         where: {
-          id: idCita,
-          cedula,
+          id: parseInt(idCita), // Convierte idCita a entero
+          cedula: cedula,
           empresaId: empresa.id,
-          estado: 'activa', // Solo buscar citas activas para cancelar
+          estado: 'activa',
         },
         include: {
           servicio: true,
@@ -609,13 +607,13 @@ exports.obtenerFechasYHorarios = async (req, res) => {
   
       const citaExistente = await prisma.cita.findUnique({
         where: {
-          id: idCita,
-          cedula,
+          id: parseInt(idCita), // Convierte idCita a entero
+          cedula: cedula,
           empresaId: empresa.id,
           estado: 'activa',
         },
         include: {
-          cliente: true, // Asumiendo que tienes un campo cliente relacionado
+          cliente: true,
           servicio: true,
           empresa: true,
         },
@@ -627,8 +625,8 @@ exports.obtenerFechasYHorarios = async (req, res) => {
   
       const citaCancelada = await prisma.cita.update({
         where: {
-          id: idCita,
-          cedula,
+          id: parseInt(idCita), // Convierte idCita a entero
+          cedula: cedula,
           empresaId: empresa.id,
         },
         data: {
