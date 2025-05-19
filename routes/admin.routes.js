@@ -182,5 +182,5 @@ router.get('/estadisticas/:slug/citas-por-anio', EstadisticasController.citasPor
 router.get("/citas/:slug/total", adminController.getTotalCitas)
 
 
-router.get('/clientes-historicos', adminController.getClientesHistoricos);
+
 module.exports = router;
