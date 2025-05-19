@@ -401,3 +401,67 @@ exports.crearServicio = async (req, res) => {
     }
   }
 
+  exports.getClientesHistoricos = async (req, res) => {
+    try {
+      const { search } = req.query;
+  
+      let whereCondition = {};
+  
+      if (search) {
+        whereCondition = {
+          OR: [
+            { nombre: { contains: search, mode: 'insensitive' } }, // Búsqueda insensible a mayúsculas
+            { cedula: { contains: search } },
+          ],
+        };
+      }
+  
+      // Obtener todos los clientes únicos y su última cita
+      const clientesUnicos = await prisma.cita.groupBy({
+        by: ['cedula'],
+        _max: {
+          id: true, // Obtener el id de la última cita para cada cliente
+        },
+        orderBy: {
+          cedula: 'asc' // Ordenar por cedula
+        }
+      });
+  
+      //Mapeo de los clientes unicos para obtener la info completa de la ultima cita
+      const clientesHistoricos = await Promise.all(
+        clientesUnicos.map(async (clienteUnico) => {
+          const ultimaCita = await prisma.cita.findUnique({
+            where: {
+              id: clienteUnico._max.id,
+            },
+            select: {
+              clienteNombre: true,
+              cedula: true,
+              correo: true,
+              telefono: true,
+            }
+          });
+          return ultimaCita;
+        })
+      );
+  
+      const clientesFiltrados = clientesHistoricos.filter(cliente => {
+        if(!search) return cliente;
+        const searchLower = search.toString().toLowerCase();
+        return (
+          cliente.nombre.toLowerCase().includes(searchLower) ||
+          cliente.cedula.includes(search)
+        );
+      });
+      //Ordena alfabeticamente
+      clientesFiltrados.sort((a,b) => a.nombre.localeCompare(b.nombre));
+      res.status(200).json(clientesFiltrados);
+    } catch (error) {
+      console.error("Error al obtener clientes históricos:", error);
+      res.status(500).json({ error: "Error al obtener clientes históricos." });
+    } finally {
+      await prisma.$disconnect();
+    }
+  };
+  
+
