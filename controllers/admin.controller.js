@@ -401,5 +401,49 @@ exports.crearServicio = async (req, res) => {
     }
   }
 
+  exports.getClientesHistoricos = async (req, res) => {
+    const { slug } = req.params;
+    try {
+      const empresa = await prisma.empresa.findUnique({
+        where: { slug: slug },
+        include: {
+          citas: true,
+        },
+      });
+  
+      if (!empresa) {
+        return res.status(404).json({ error: "Empresa no encontrada" });
+      }
+  
+      // Mapear las citas para obtener información del cliente y eliminar duplicados
+      const clientesMap = new Map();
+      empresa.citas.forEach(cita => {
+        const clienteKey = cita.cedula; // Usar la cédula como clave
+        if (!clientesMap.has(clienteKey)) {
+          clientesMap.set(clienteKey, {
+            id: cliente.id.toString(),
+            nombre: cita.clienteNombre,
+            cedula: cita.cedula,
+            correo: cita.correo,
+            telefono: cita.telefono,
+          });
+        }
+      });
+  
+      // Convertir el Map a un array de clientes
+      const clientesHistoricos = Array.from(clientesMap.values());
+  
+  
+      // Ordenar alfabéticamente por nombre
+      clientesHistoricos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  
+      res.status(200).json(clientesHistoricos);
+    } catch (error) {
+      console.error("Error al obtener clientes históricos:", error);
+      res.status(500).json({ error: "Error al obtener clientes históricos." });
+    } finally {
+      await prisma.$disconnect();
+    }
+  };
   
 
