@@ -415,13 +415,12 @@ exports.crearServicio = async (req, res) => {
         return res.status(404).json({ error: "Empresa no encontrada" });
       }
   
-      // Mapear las citas para obtener información del cliente y eliminar duplicados
       const clientesMap = new Map();
       empresa.citas.forEach(cita => {
-        const clienteKey = cita.cedula; // Usar la cédula como clave
+        const clienteKey = cita.cedula;
         if (!clientesMap.has(clienteKey)) {
           clientesMap.set(clienteKey, {
-            id: cliente.id.toString(),
+            id: cita.id.toString(), // ✅ Corregido aquí
             nombre: cita.clienteNombre,
             cedula: cita.cedula,
             correo: cita.correo,
@@ -430,11 +429,7 @@ exports.crearServicio = async (req, res) => {
         }
       });
   
-      // Convertir el Map a un array de clientes
       const clientesHistoricos = Array.from(clientesMap.values());
-  
-  
-      // Ordenar alfabéticamente por nombre
       clientesHistoricos.sort((a, b) => a.nombre.localeCompare(b.nombre));
   
       res.status(200).json(clientesHistoricos);
