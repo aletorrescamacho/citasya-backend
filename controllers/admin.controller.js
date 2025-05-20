@@ -405,7 +405,7 @@ exports.crearServicio = async (req, res) => {
     const { slug } = req.params;
     try {
       const empresa = await prisma.empresa.findUnique({
-        where: { slug: slug },
+        where: { slug },
         include: {
           citas: true,
         },
@@ -416,20 +416,28 @@ exports.crearServicio = async (req, res) => {
       }
   
       const clientesMap = new Map();
+  
       empresa.citas.forEach(cita => {
         const clienteKey = cita.cedula;
-        if (!clientesMap.has(clienteKey)) {
+  
+        const fechaCita = new Date(cita.fecha);
+  
+        // Si no existe aún, o si la cita actual es más reciente, la guardamos
+        if (!clientesMap.has(clienteKey) || fechaCita > new Date(clientesMap.get(clienteKey).fecha)) {
           clientesMap.set(clienteKey, {
-            id: cita.id.toString(), // ✅ Corregido aquí
+            id: cita.id.toString(),
             nombre: cita.clienteNombre,
             cedula: cita.cedula,
             correo: cita.correo,
             telefono: cita.telefono,
+            fecha: cita.fecha, // ⬅️ útil para comparar
           });
         }
       });
   
-      const clientesHistoricos = Array.from(clientesMap.values());
+      // Convertimos a array y eliminamos la fecha antes de enviar
+      const clientesHistoricos = Array.from(clientesMap.values()).map(({ fecha, ...cliente }) => cliente);
+  
       clientesHistoricos.sort((a, b) => a.nombre.localeCompare(b.nombre));
   
       res.status(200).json(clientesHistoricos);
@@ -440,5 +448,6 @@ exports.crearServicio = async (req, res) => {
       await prisma.$disconnect();
     }
   };
+  
   
 
